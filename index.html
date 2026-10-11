@@ -1,0 +1,562 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skyrim RP — Carte interactive</title>
+
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <style>
+    :root {
+      --bg: #17191c;
+      --panel: #23272d;
+      --border: #414750;
+      --text: #f2eee5;
+      --gold: #d8b879;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      padding: 16px 20px;
+      background: #202329;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      color: var(--gold);
+      font-size: 25px;
+    }
+
+    header p {
+      margin: 0;
+      color: #c0c4cb;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      min-height: calc(100vh - 80px);
+    }
+
+    aside {
+      padding: 16px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 16px;
+      color: var(--gold);
+      margin: 0 0 12px;
+    }
+
+    .layers {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .layer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .layer input { accent-color: var(--gold); }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 12px;
+      border-radius: 50%;
+    }
+
+    .panel {
+      padding: 12px;
+      margin: 12px 0 20px;
+      background: #2c3138;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    button {
+      padding: 8px 10px;
+      border: 1px solid #646b74;
+      border-radius: 5px;
+      background: #414852;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover { background: #555e69; }
+
+    #map {
+      height: calc(100vh - 80px);
+      min-height: 450px;
+      background: #111315;
+    }
+
+    #status {
+      white-space: pre-line;
+    }
+
+    .popup-title {
+      font-weight: bold;
+      font-size: 17px;
+      margin-bottom: 6px;
+    }
+
+    .popup-meta {
+      color: #626870;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .popup-description {
+      white-space: pre-wrap;
+      margin: 8px 0;
+    }
+
+    .popup-image {
+      display: block;
+      max-width: 220px;
+      max-height: 160px;
+      margin-top: 10px;
+      object-fit: contain;
+    }
+
+    @media (max-width: 760px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { border-right: none; }
+      #map { height: 70vh; min-height: 400px; }
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Carte interactive — Skyrim RP</h1>
+  <p>Explore les lieux, personnages, artefacts et factions de ton univers.</p>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>Calques</h2>
+    <div id="layers" class="layers">Chargement…</div>
+
+    <h2>Coordonnées</h2>
+    <div class="panel">
+      <div>Curseur : <strong id="cursor">X — / Y —</strong></div>
+      <div>Point choisi : <strong id="selected">aucun</strong></div>
+      <p>Clique sur la carte pour choisir une position.</p>
+      <button id="copy">Copier X,Y</button>
+      <button id="clear">Effacer</button>
+    </div>
+
+    <h2>État du chargement</h2>
+    <div id="status" class="panel">Initialisation…</div>
+
+    <div class="panel">
+      <strong>Utilisation</strong>
+      <p>Les colonnes <code>Region X</code> et <code>Region Y</code> indiquent la position en pixels sur l'image.</p>
+      <p>Dans <code>Visible</code>, utilise <code>oui</code> pour afficher un point ou <code>non</code> pour le masquer. Une cellule vide est considérée comme visible.</p>
+      <p>Les liens CSV publiés sont accessibles publiquement.</p>
+    </div>
+  </aside>
+
+  <main>
+    <div id="map"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script>
+  // =========================================================
+  // CONFIGURATION
+  // Ton lien Lieux est déjà intégré.
+  // Remplace les URL_CSV_... par les liens des autres onglets.
+  // =========================================================
+
+  const MAP_IMAGE =
+    "https://images.uesp.net/f/fe/MER-art-Skyrim_Anthology_Map.jpg";
+
+  const SHEETS = [
+    {
+      name: "Lieux",
+      color: "#55aaff",
+      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub?gid=0&single=true&output=csv"
+    },
+    {
+      name: "Personnes",
+      color: "#55cc88",
+      url: "URL_CSV_PERSONNES"
+    },
+    {
+      name: "Artefacts",
+      color: "#bb88ff",
+      url: "URL_CSV_ARTEFACTS"
+    },
+    {
+      name: "Potentiel butin",
+      color: "#e5b44f",
+      url: "URL_CSV_BUTIN"
+    },
+    {
+      name: "Zones à éviter",
+      color: "#ff6666",
+      url: "URL_CSV_DANGERS"
+    },
+    {
+      name: "Factions",
+      color: "#dddddd",
+      url: "URL_CSV_FACTIONS"
+    }
+  ];
+
+  const $ = id => document.getElementById(id);
+
+  let map;
+  let imageWidth = 0;
+  let imageHeight = 0;
+  let selectedMarker = null;
+  let selectedPoint = null;
+
+  function status(message) {
+    $("status").textContent = message;
+  }
+
+  function normalize(value) {
+    return String(value ?? "").trim().toLowerCase();
+  }
+
+  function field(row, names) {
+    for (const name of names) {
+      if (row[name] !== undefined &&
+          String(row[name]).trim() !== "") {
+        return String(row[name]).trim();
+      }
+    }
+    return "";
+  }
+
+  function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  function visible(value) {
+    const v = normalize(value);
+    return ![
+      "non", "no", "false", "0",
+      "masqué", "masquee", "cache", "caché"
+    ].includes(v);
+  }
+
+  function makePopup(row, sheetName) {
+    const name = field(row, ["Nom", "nom", "Name"]) || "Sans nom";
+    const category = field(row, [
+      "Categorie", "Catégorie", "Type"
+    ]);
+    const region = field(row, ["Region", "Région"]);
+    const id = field(row, ["ID", "Id", "id"]);
+    const description = field(row, ["Description"]);
+    const fiche = field(row, ["Fiche"]);
+    const imageURL = field(row, ["Image_URL", "Image URL"]);
+
+    let html =
+      '<div class="popup-title">' + escapeHTML(name) + '</div>';
+
+    const meta = [sheetName, category, region, id]
+      .filter(Boolean)
+      .join(" · ");
+
+    if (meta) {
+      html += '<div class="popup-meta">' +
+        escapeHTML(meta) + '</div>';
+    }
+
+    if (description) {
+      html += '<div class="popup-description">' +
+        escapeHTML(description) + '</div>';
+    }
+
+    if (fiche && /^https?:\/\//i.test(fiche)) {
+      html += '<a href="' + escapeHTML(fiche) +
+        '" target="_blank" rel="noopener noreferrer">Ouvrir la fiche</a>';
+    }
+
+    if (imageURL && /^https?:\/\//i.test(imageURL)) {
+      html += '<img class="popup-image" src="' +
+        escapeHTML(imageURL) + '" alt="' +
+        escapeHTML(name) + '" onerror="this.style.display=\'none\'">';
+    }
+
+    return html;
+  }
+
+  async function loadSheet(sheet) {
+    if (!sheet.url || sheet.url.startsWith("URL_CSV_")) {
+      return { sheet, skipped: true };
+    }
+
+    try {
+      const response = await fetch(sheet.url);
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const csv = await response.text();
+
+      const parsed = Papa.parse(csv, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: header =>
+          String(header).replace(/^\uFEFF/, "").trim()
+      });
+
+      const rows = parsed.data || [];
+      const layer = L.layerGroup();
+
+      let count = 0;
+      let invalid = 0;
+      let hidden = 0;
+
+      rows.forEach(row => {
+        if (!visible(field(row, ["Visible", "visible"]))) {
+          hidden++;
+          return;
+        }
+
+        // IMPORTANT : noms exacts des colonnes de ton Google Sheet
+        const rawX = field(row, ["Region X", "Region_X", "X"]);
+        const rawY = field(row, ["Region Y", "Region_Y", "Y"]);
+
+        const x = Number(rawX.replace(",", "."));
+        const y = Number(rawY.replace(",", "."));
+
+        if (
+          rawX === "" || rawY === "" ||
+          !Number.isFinite(x) || !Number.isFinite(y) ||
+          x < 0 || y < 0 ||
+          x > imageWidth || y > imageHeight
+        ) {
+          invalid++;
+          return;
+        }
+
+        const marker = L.circleMarker(
+          [imageHeight - y, x],
+          {
+            radius: sheet.name === "Lieux" ? 7 : 6,
+            color: sheet.color,
+            fillColor: sheet.color,
+            fillOpacity: 0.9,
+            weight: 2
+          }
+        );
+
+        marker.bindPopup(makePopup(row, sheet.name));
+        layer.addLayer(marker);
+        count++;
+      });
+
+      if (count > 0) {
+        layer.addTo(map);
+      }
+
+      return { sheet, layer, count, invalid, hidden, rows: rows.length };
+
+    } catch (error) {
+      console.error("Erreur CSV :", sheet.name, error);
+      return { sheet, error: error.message };
+    }
+  }
+
+  function addLayerControl(result) {
+    const sheet = result.sheet;
+
+    if (result.skipped) {
+      const line = document.createElement("div");
+      line.textContent = sheet.name + " — lien à ajouter";
+      $("layers").appendChild(line);
+      return;
+    }
+
+    if (result.error) {
+      const line = document.createElement("div");
+      line.textContent = sheet.name + " — erreur de chargement";
+      $("layers").appendChild(line);
+      return;
+    }
+
+    const label = document.createElement("label");
+    label.className = "layer";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = result.count > 0;
+    checkbox.disabled = result.count === 0;
+
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        result.layer.addTo(map);
+      } else {
+        map.removeLayer(result.layer);
+      }
+    });
+
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.backgroundColor = sheet.color;
+
+    const text = document.createElement("span");
+    text.textContent = sheet.name + " (" + result.count + ")";
+
+    label.append(checkbox, dot, text);
+    $("layers").appendChild(label);
+  }
+
+  async function initializeMap() {
+    const image = new Image();
+
+    image.onload = async () => {
+      imageWidth = image.naturalWidth;
+      imageHeight = image.naturalHeight;
+
+      const bounds = [[0, 0], [imageHeight, imageWidth]];
+
+      map = L.map("map", {
+        crs: L.CRS.Simple,
+        minZoom: -3,
+        maxZoom: 3,
+        zoomSnap: 0.25,
+        zoomDelta: 0.5
+      });
+
+      L.imageOverlay(MAP_IMAGE, bounds).addTo(map);
+      map.fitBounds(bounds);
+
+      map.on("mousemove", event => {
+        const x = Math.round(event.latlng.lng);
+        const y = Math.round(imageHeight - event.latlng.lat);
+        $("cursor").textContent = "X " + x + " / Y " + y;
+      });
+
+      map.on("click", event => {
+        const x = Math.round(event.latlng.lng);
+        const y = Math.round(imageHeight - event.latlng.lat);
+
+        selectedPoint = {
+          x: Math.max(0, Math.min(imageWidth, x)),
+          y: Math.max(0, Math.min(imageHeight, y))
+        };
+
+        if (selectedMarker) {
+          map.removeLayer(selectedMarker);
+        }
+
+        selectedMarker = L.circleMarker(
+          [imageHeight - selectedPoint.y, selectedPoint.x],
+          {
+            radius: 8,
+            color: "#ffffff",
+            fillColor: "#ffdf45",
+            fillOpacity: 1,
+            weight: 3
+          }
+        ).addTo(map);
+
+        selectedMarker.bindPopup(
+          "X = " + selectedPoint.x +
+          "<br>Y = " + selectedPoint.y
+        ).openPopup();
+
+        $("selected").textContent =
+          "X " + selectedPoint.x + " / Y " + selectedPoint.y;
+      });
+
+      $("copy").addEventListener("click", async () => {
+        if (!selectedPoint) {
+          status("Clique d'abord sur la carte pour sélectionner un point.");
+          return;
+        }
+
+        const coords = selectedPoint.x + "," + selectedPoint.y;
+
+        try {
+          await navigator.clipboard.writeText(coords);
+          status("Coordonnées copiées : " + coords);
+        } catch {
+          status("Copie manuelle : " + coords);
+        }
+      });
+
+      $("clear").addEventListener("click", () => {
+        if (selectedMarker) map.removeLayer(selectedMarker);
+        selectedMarker = null;
+        selectedPoint = null;
+        $("selected").textContent = "aucun";
+      });
+
+      $("layers").textContent = "";
+      status(
+        "Carte chargée (" + imageWidth + " × " +
+        imageHeight + " pixels).\nChargement des onglets…"
+      );
+
+      const results = await Promise.all(SHEETS.map(loadSheet));
+      results.forEach(addLayerControl);
+
+      status(results.map(result => {
+        if (result.skipped) {
+          return result.sheet.name + " : lien CSV à ajouter";
+        }
+        if (result.error) {
+          return result.sheet.name + " : ERREUR — " + result.error;
+        }
+
+        return result.sheet.name + " : " + result.count +
+          " point(s), " + result.invalid +
+          " ligne(s) sans coordonnées valides, " +
+          result.hidden + " masqué(s)";
+      }).join("\n"));
+    };
+
+    image.onerror = () => {
+      status(
+        "Impossible de charger l'image de la carte. " +
+        "Vérifie l'URL de l'image."
+      );
+    };
+
+    image.src = MAP_IMAGE;
+  }
+
+  initializeMap();
+</script>
+</body>
+</html>
