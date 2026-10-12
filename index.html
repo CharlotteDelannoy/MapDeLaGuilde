@@ -1,562 +1,473 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Skyrim RP — Carte interactive</title>
-
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     :root {
-      --bg: #17191c;
-      --panel: #23272d;
-      --border: #414750;
-      --text: #f2eee5;
-      --gold: #d8b879;
+      --bg:#17191c; --panel:#23272d; --border:#414750;
+      --text:#f2eee5; --muted:#b7bdc5; --gold:#d8b879;
     }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Arial, sans-serif;
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Arial,sans-serif; }
+    header { padding:14px 18px; background:#202329; border-bottom:1px solid var(--border); }
+    h1 { margin:0 0 5px; color:var(--gold); font-size:23px; }
+    header p { margin:0; color:#c0c4cb; font-size:13px; }
+    .layout { display:grid; grid-template-columns:245px minmax(0,1fr) 285px; min-height:calc(100vh - 70px); }
+    aside { padding:14px; background:var(--panel); min-width:0; }
+    .left { border-right:1px solid var(--border); }
+    .right { border-left:1px solid var(--border); }
+    h2 { font-size:15px; color:var(--gold); margin:0 0 10px; }
+    h3 { font-size:14px; margin:0 0 7px; }
+    .section { margin-bottom:20px; }
+    .layers { display:grid; gap:10px; }
+    .layer { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; }
+    .layer input { accent-color:var(--gold); }
+    .dot { width:11px; height:11px; flex:0 0 11px; border-radius:50%; }
+    .panel { padding:11px; margin:10px 0; background:#2c3138; border:1px solid var(--border); border-radius:8px; overflow-wrap:anywhere; font-size:12px; line-height:1.5; }
+    button, select, input[type="search"] { font:inherit; }
+    button { padding:8px 10px; border:1px solid #646b74; border-radius:5px; background:#414852; color:white; cursor:pointer; }
+    button:hover { background:#555e69; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    input[type="search"], select { width:100%; padding:9px; border:1px solid #555d67; border-radius:6px; background:#171a1e; color:var(--text); }
+    #map { height:calc(100vh - 70px); min-height:480px; background:#111315; }
+    #status { white-space:pre-line; }
+    .small { color:var(--muted); font-size:11px; }
+    .person-list { display:grid; gap:6px; margin-top:9px; }
+    .person-item { display:block; width:100%; text-align:left; background:#2c3138; border:1px solid #424953; padding:9px; }
+    .person-item strong { display:block; color:#f2eee5; margin-bottom:3px; }
+    .person-item span { display:block; color:#b7bdc5; font-size:11px; }
+    .empty { color:var(--muted); font-size:12px; line-height:1.5; }
+    .popup-title { font-weight:bold; font-size:17px; margin-bottom:6px; }
+    .popup-meta { color:#626870; font-size:12px; margin-bottom:8px; }
+    .popup-description { white-space:pre-wrap; margin:8px 0; }
+    .popup-image { display:block; max-width:220px; max-height:160px; margin-top:10px; object-fit:contain; }
+    .popup-actions { margin-top:10px; }
+    .overlay { position:fixed; inset:0; z-index:2000; display:none; align-items:center; justify-content:center; padding:3vh 3vw; background:rgba(0,0,0,.72); }
+    .overlay.open { display:flex; }
+    .overlay-window { width:min(1500px,96vw); height:94vh; background:#202329; border:1px solid #82714e; border-radius:10px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 18px 70px #000b; }
+    .overlay-header { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--border); }
+    .overlay-header h2 { margin:0; flex:1; }
+    #regionalMap { flex:1; min-height:0; background:#111315; }
+    .overlay-help { padding:6px 12px; font-size:11px; color:var(--muted); background:#202329; }
+    .modal { position:fixed; inset:0; z-index:3000; display:none; align-items:center; justify-content:center; padding:20px; background:#0009; }
+    .modal.open { display:flex; }
+    .modal-card { width:min(560px,95vw); max-height:85vh; overflow:auto; background:#23272d; border:1px solid #82714e; border-radius:10px; padding:18px; }
+    .modal-top { display:flex; align-items:start; gap:12px; }
+    .modal-top h2 { flex:1; font-size:19px; }
+    .modal-body { white-space:pre-wrap; line-height:1.55; font-size:14px; }
+    a { color:#2875b9; }
+    @media (max-width:1000px) {
+      .layout { grid-template-columns:220px minmax(0,1fr); }
+      .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--border); }
+      #peopleList { grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }
+      #map { height:70vh; }
     }
-
-    header {
-      padding: 16px 20px;
-      background: #202329;
-      border-bottom: 1px solid var(--border);
-    }
-
-    h1 {
-      margin: 0 0 6px;
-      color: var(--gold);
-      font-size: 25px;
-    }
-
-    header p {
-      margin: 0;
-      color: #c0c4cb;
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 270px minmax(0, 1fr);
-      min-height: calc(100vh - 80px);
-    }
-
-    aside {
-      padding: 16px;
-      background: var(--panel);
-      border-right: 1px solid var(--border);
-    }
-
-    h2 {
-      font-size: 16px;
-      color: var(--gold);
-      margin: 0 0 12px;
-    }
-
-    .layers {
-      display: grid;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .layer {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-    }
-
-    .layer input { accent-color: var(--gold); }
-
-    .dot {
-      width: 12px;
-      height: 12px;
-      flex: 0 0 12px;
-      border-radius: 50%;
-    }
-
-    .panel {
-      padding: 12px;
-      margin: 12px 0 20px;
-      background: #2c3138;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow-wrap: anywhere;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    button {
-      padding: 8px 10px;
-      border: 1px solid #646b74;
-      border-radius: 5px;
-      background: #414852;
-      color: white;
-      cursor: pointer;
-    }
-
-    button:hover { background: #555e69; }
-
-    #map {
-      height: calc(100vh - 80px);
-      min-height: 450px;
-      background: #111315;
-    }
-
-    #status {
-      white-space: pre-line;
-    }
-
-    .popup-title {
-      font-weight: bold;
-      font-size: 17px;
-      margin-bottom: 6px;
-    }
-
-    .popup-meta {
-      color: #626870;
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-
-    .popup-description {
-      white-space: pre-wrap;
-      margin: 8px 0;
-    }
-
-    .popup-image {
-      display: block;
-      max-width: 220px;
-      max-height: 160px;
-      margin-top: 10px;
-      object-fit: contain;
-    }
-
-    @media (max-width: 760px) {
-      .layout { grid-template-columns: 1fr; }
-      aside { border-right: none; }
-      #map { height: 70vh; min-height: 400px; }
+    @media (max-width:650px) {
+      .layout { grid-template-columns:1fr; }
+      .left { border-right:0; border-bottom:1px solid var(--border); }
+      #map { height:65vh; min-height:380px; }
+      .overlay { padding:1vh 1vw; }
+      .overlay-window { width:99vw; height:98vh; }
     }
   </style>
 </head>
-
 <body>
 <header>
   <h1>Carte interactive — Skyrim RP</h1>
-  <p>Explore les lieux, personnages, artefacts et factions de ton univers.</p>
+  <p>Explore les lieux, personnages, artefacts et factions. Les cartes régionales s’ouvrent en superposition.</p>
 </header>
 
 <div class="layout">
-  <aside>
-    <h2>Calques</h2>
-    <div id="layers" class="layers">Chargement…</div>
-
-    <h2>Coordonnées</h2>
+  <aside class="left">
+    <section class="section">
+      <h2>Calques</h2>
+      <div id="layers" class="layers">Chargement…</div>
+    </section>
+    <section class="section">
+      <h2>Ouvrir une carte régionale</h2>
+      <select id="mapSelect"><option value="">Chargement des cartes…</option></select>
+      <button id="openMap" style="width:100%;margin-top:8px" disabled>Ouvrir en superposition</button>
+      <p class="small">Ajoute les cartes régionales dans l’onglet Google Sheets <code>Cartes</code>.</p>
+    </section>
+    <section class="section">
+      <h2>Coordonnées</h2>
+      <div class="panel">
+        <div>Curseur : <strong id="cursor">X — / Y —</strong></div>
+        <div>Point choisi : <strong id="selected">aucun</strong></div>
+        <p>Clique sur la carte active pour choisir une position.</p>
+        <button id="copy">Copier X,Y</button>
+        <button id="clear">Effacer</button>
+      </div>
+    </section>
+    <section class="section">
+      <h2>État du chargement</h2>
+      <div id="status" class="panel">Initialisation…</div>
+    </section>
     <div class="panel">
-      <div>Curseur : <strong id="cursor">X — / Y —</strong></div>
-      <div>Point choisi : <strong id="selected">aucun</strong></div>
-      <p>Clique sur la carte pour choisir une position.</p>
-      <button id="copy">Copier X,Y</button>
-      <button id="clear">Effacer</button>
-    </div>
-
-    <h2>État du chargement</h2>
-    <div id="status" class="panel">Initialisation…</div>
-
-    <div class="panel">
-      <strong>Utilisation</strong>
-      <p>Les colonnes <code>Region X</code> et <code>Region Y</code> indiquent la position en pixels sur l'image.</p>
-      <p>Dans <code>Visible</code>, utilise <code>oui</code> pour afficher un point ou <code>non</code> pour le masquer. Une cellule vide est considérée comme visible.</p>
+      <strong>Repères pour Google Sheets</strong>
+      <p>Les colonnes de coordonnées acceptées sont <code>Region X</code>/<code>Region Y</code> ou <code>X</code>/<code>Y</code>.</p>
+      <p><code>Carte_ID</code> relie un lieu ou une faction à une carte. Les lignes sans <code>Carte_ID</code> restent sur la carte principale.</p>
       <p>Les liens CSV publiés sont accessibles publiquement.</p>
     </div>
   </aside>
 
-  <main>
-    <div id="map"></div>
-  </main>
+  <main><div id="map"></div></main>
+
+  <aside class="right">
+    <section class="section">
+      <h2>Rechercher un personnage</h2>
+      <input id="personSearch" type="search" placeholder="Nom du personnage…" autocomplete="off">
+      <div id="searchResults" class="person-list"><p class="empty">Chargement des personnages…</p></div>
+    </section>
+    <section class="section">
+      <h2 id="relatedTitle">Personnes liées</h2>
+      <p id="relatedContext" class="small">Sélectionne un lieu ou une faction sur la carte.</p>
+      <div id="peopleList" class="person-list"><p class="empty">Aucun élément sélectionné.</p></div>
+    </section>
+  </aside>
+</div>
+
+<div id="regionalOverlay" class="overlay" role="dialog" aria-modal="true" aria-label="Carte régionale">
+  <div class="overlay-window">
+    <div class="overlay-header">
+      <h2 id="regionalTitle">Carte régionale</h2>
+      <span id="regionalCoords" class="small"></span>
+      <button id="closeMap" aria-label="Fermer la carte régionale">Fermer ✕</button>
+    </div>
+    <div id="regionalMap"></div>
+    <div class="overlay-help">Cette carte possède ses propres coordonnées et marqueurs. Échap ou « Fermer » pour revenir à Bordeciel.</div>
+  </div>
+</div>
+
+<div id="personModal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-top"><h2 id="personModalTitle">Personnage</h2><button id="closePerson">Fermer ✕</button></div>
+    <div id="personModalBody" class="modal-body"></div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
 <script>
-  // =========================================================
+  // ============================================================
   // CONFIGURATION
-  // Ton lien Lieux est déjà intégré.
-  // Remplace les URL_CSV_... par les liens des autres onglets.
-  // =========================================================
+  // ============================================================
+  const MAIN_MAP_ID = "MAP_BORDECIEL";
+  const MAP_IMAGE = "https://images.uesp.net/f/fe/MER-art-Skyrim_Anthology_Map.jpg";
 
-  const MAP_IMAGE =
-    "https://images.uesp.net/f/fe/MER-art-Skyrim_Anthology_Map.jpg";
+  const PUBLISHED_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub";
+
+  // IMPORTANT : publie l'onglet « Cartes » en CSV puis colle son URL ici.
+  // Tant que cette URL est vide, la carte principale fonctionne mais les cartes
+  // régionales doivent être configurées dans cet onglet avant de pouvoir s'ouvrir.
+  const CARTES_CSV_URL = "";
 
   const SHEETS = [
-    {
-      name: "Lieux",
-      color: "#55aaff",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub?gid=0&single=true&output=csv"
-    },
-    {
-      name: "Personnes",
-      color: "#55cc88",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub?gid=1841502172&single=true&output=csv"
-    },
-    {
-      name: "Artefacts",
-      color: "#bb88ff",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub?gid=1452202772&single=true&output=csv"
-    },
-    {
-      name: "Potentiel butin",
-      color: "#e5b44f",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pubhtml?gid=1386882641&single=true"
-    },
-    {
-      name: "Zones à éviter",
-      color: "#ff6666",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pubhtml?gid=1922621588&single=true"
-    },
-    {
-      name: "Factions",
-      color: "#dddddd",
-      url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNzRzsUlm2RM58JAXUa7B9kE5yKrkDqIpykHVKbSuAwT2AXFq7IRgMn6900KK5N4SvgrdQXZ99_jVu/pub?gid=284707486&single=true&output=csv"
-    }
+    { name:"Lieux", color:"#55aaff", url:PUBLISHED_BASE+"?gid=0&single=true&output=csv", kind:"place" },
+    { name:"Personnes", color:"#55cc88", url:PUBLISHED_BASE+"?gid=1841502172&single=true&output=csv", kind:"person" },
+    { name:"Artefacts", color:"#bb88ff", url:PUBLISHED_BASE+"?gid=1452202772&single=true&output=csv", kind:"artifact" },
+    { name:"Potentiel butin", color:"#e5b44f", url:PUBLISHED_BASE+"?gid=1386882641&single=true&output=csv", kind:"loot" },
+    { name:"Zones à éviter", color:"#ff6666", url:PUBLISHED_BASE+"?gid=1922621588&single=true&output=csv", kind:"danger" },
+    { name:"Factions", color:"#dddddd", url:PUBLISHED_BASE+"?gid=284707486&single=true&output=csv", kind:"faction" }
   ];
 
   const $ = id => document.getElementById(id);
+  let map, regionalMap, imageWidth=0, imageHeight=0, regionalImageWidth=0, regionalImageHeight=0;
+  let selectedMarker=null, selectedPoint=null, regionalSelectedMarker=null;
+  let loadedSheets=[], mapDefinitions=[], peopleRows=[], selectedEntity=null, activeRegionalMap=null;
+  const mainLayers = new Map();
+  const regionalLayers = new Map();
 
-  let map;
-  let imageWidth = 0;
-  let imageHeight = 0;
-  let selectedMarker = null;
-  let selectedPoint = null;
-
-  function status(message) {
-    $("status").textContent = message;
-  }
-
-  function normalize(value) {
-    return String(value ?? "").trim().toLowerCase();
-  }
-
+  function status(message) { $("status").textContent = message; }
+  function normalize(value) { return String(value ?? "").trim().toLocaleLowerCase("fr"); }
   function field(row, names) {
-    for (const name of names) {
-      if (row[name] !== undefined &&
-          String(row[name]).trim() !== "") {
-        return String(row[name]).trim();
-      }
-    }
+    for (const name of names) if (row[name] !== undefined && String(row[name]).trim() !== "") return String(row[name]).trim();
+    const wanted = names.map(normalize);
+    for (const key of Object.keys(row || {})) if (wanted.includes(normalize(key)) && String(row[key] ?? "").trim() !== "") return String(row[key]).trim();
     return "";
   }
-
+  function splitIds(value) {
+    return String(value || "").split(/[;,|]/).map(v=>v.trim()).filter(Boolean);
+  }
   function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    })[char]);
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   }
-
-  function visible(value) {
-    const v = normalize(value);
-    return ![
-      "non", "no", "false", "0",
-      "masqué", "masquee", "cache", "caché"
-    ].includes(v);
+  function isVisible(value) {
+    const v=normalize(value);
+    return !["non","no","false","0","masqué","masquee","cache","caché"].includes(v);
   }
-
-  function makePopup(row, sheetName) {
-    const name = field(row, ["Nom", "nom", "Name"]) || "Sans nom";
-    const category = field(row, [
-      "Categorie", "Catégorie", "Type"
-    ]);
-    const region = field(row, ["Region", "Région"]);
-    const id = field(row, ["ID", "Id", "id"]);
-    const description = field(row, ["Description"]);
-    const fiche = field(row, ["Fiche"]);
-    const imageURL = field(row, ["Image_URL", "Image URL"]);
-
-    let html =
-      '<div class="popup-title">' + escapeHTML(name) + '</div>';
-
-    const meta = [sheetName, category, region, id]
-      .filter(Boolean)
-      .join(" · ");
-
-    if (meta) {
-      html += '<div class="popup-meta">' +
-        escapeHTML(meta) + '</div>';
-    }
-
-    if (description) {
-      html += '<div class="popup-description">' +
-        escapeHTML(description) + '</div>';
-    }
-
-    if (fiche && /^https?:\/\//i.test(fiche)) {
-      html += '<a href="' + escapeHTML(fiche) +
-        '" target="_blank" rel="noopener noreferrer">Ouvrir la fiche</a>';
-    }
-
-    if (imageURL && /^https?:\/\//i.test(imageURL)) {
-      html += '<img class="popup-image" src="' +
-        escapeHTML(imageURL) + '" alt="' +
-        escapeHTML(name) + '" onerror="this.style.display=\'none\'">';
-    }
-
+  function getName(row) { return field(row,["Nom","Name","Personnage","Faction","Lieu"]) || "Sans nom"; }
+  function getId(row, fallbackPrefix="ID") { return field(row,["ID","Id","id","Lieu_ID","Faction_ID","Personnage_ID","Carte_ID"]) || fallbackPrefix+"_"+getName(row).toUpperCase().replace(/[^A-Z0-9]+/g,"_"); }
+  function getMapId(row) { return field(row,["Carte_ID","Map_ID","MapID","Carte ID"]); }
+  function isMainMapRow(row) { const id=normalize(getMapId(row)); return !id || id===normalize(MAIN_MAP_ID) || ["bordeciel","skyrim","main"].includes(id); }
+  function imageUrlForMap(def) {
+    const raw=field(def,["Image_URL","Image URL","URL_Image","Image","URL"]);
+    if (!raw) return "";
+    try { return new URL(raw, window.location.href).href; } catch { return raw; }
+  }
+  function popupHTML(row, sheetName, mapId) {
+    const name=getName(row), category=field(row,["Categorie","Catégorie","Type"]), id=getId(row);
+    const region=field(row,["Region","Région"]), description=field(row,["Description","Résumé","Notes"]);
+    const fiche=field(row,["Fiche","URL","Lien"]), imageURL=field(row,["Image_URL","Image URL"]);
+    const meta=[sheetName,category,region,id].filter(Boolean).join(" · ");
+    let html='<div class="popup-title">'+escapeHTML(name)+'</div>';
+    if(meta) html+='<div class="popup-meta">'+escapeHTML(meta)+'</div>';
+    if(description) html+='<div class="popup-description">'+escapeHTML(description)+'</div>';
+    if(fiche && /^https?:\/\//i.test(fiche)) html+='<p><a href="'+escapeHTML(fiche)+'" target="_blank" rel="noopener noreferrer">Ouvrir la fiche</a></p>';
+    if(imageURL && /^https?:\/\//i.test(imageURL)) html+='<img class="popup-image" src="'+escapeHTML(imageURL)+'" alt="'+escapeHTML(name)+'" onerror="this.style.display=\'none\'">';
+    if(mapId && mapId!==MAIN_MAP_ID) html+='<div class="popup-actions"><button type="button" onclick="openRegionalMapById(\''+escapeHTML(mapId).replace(/'/g,"\\'")+'\')">Ouvrir la carte associée</button></div>';
     return html;
   }
-
-  async function loadSheet(sheet) {
-    if (!sheet.url || sheet.url.startsWith("URL_CSV_")) {
-      return { sheet, skipped: true };
-    }
-
-    try {
-      const response = await fetch(sheet.url);
-
-      if (!response.ok) {
-        throw new Error("HTTP " + response.status);
-      }
-
-      const csv = await response.text();
-
-      const parsed = Papa.parse(csv, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: header =>
-          String(header).replace(/^\uFEFF/, "").trim()
-      });
-
-      const rows = parsed.data || [];
-      const layer = L.layerGroup();
-
-      let count = 0;
-      let invalid = 0;
-      let hidden = 0;
-
-      rows.forEach(row => {
-        if (!visible(field(row, ["Visible", "visible"]))) {
-          hidden++;
-          return;
-        }
-
-        // IMPORTANT : noms exacts des colonnes de ton Google Sheet
-        const rawX = field(row, ["Region X", "Region_X", "X"]);
-        const rawY = field(row, ["Region Y", "Region_Y", "Y"]);
-
-        const x = Number(rawX.replace(",", "."));
-        const y = Number(rawY.replace(",", "."));
-
-        if (
-          rawX === "" || rawY === "" ||
-          !Number.isFinite(x) || !Number.isFinite(y) ||
-          x < 0 || y < 0 ||
-          x > imageWidth || y > imageHeight
-        ) {
-          invalid++;
-          return;
-        }
-
-        const marker = L.circleMarker(
-          [imageHeight - y, x],
-          {
-            radius: sheet.name === "Lieux" ? 7 : 6,
-            color: sheet.color,
-            fillColor: sheet.color,
-            fillOpacity: 0.9,
-            weight: 2
-          }
-        );
-
-        marker.bindPopup(makePopup(row, sheet.name));
-        layer.addLayer(marker);
-        count++;
-      });
-
-      if (count > 0) {
-        layer.addTo(map);
-      }
-
-      return { sheet, layer, count, invalid, hidden, rows: rows.length };
-
-    } catch (error) {
-      console.error("Erreur CSV :", sheet.name, error);
-      return { sheet, error: error.message };
-    }
+  async function fetchCSV(url, name) {
+    const response=await fetch(url);
+    if(!response.ok) throw new Error("HTTP "+response.status);
+    const csv=await response.text();
+    if (csv.trim().startsWith("<!DOCTYPE") || csv.trim().startsWith("<html")) throw new Error("La feuille ne renvoie pas du CSV. Vérifie la publication de l’onglet.");
+    const parsed=Papa.parse(csv,{header:true,skipEmptyLines:true,transformHeader:h=>String(h).replace(/^\uFEFF/,"").trim()});
+    return (parsed.data||[]).filter(row=>Object.values(row).some(v=>String(v??"").trim()!==""));
   }
-
-  function addLayerControl(result) {
-    const sheet = result.sheet;
-
-    if (result.skipped) {
-      const line = document.createElement("div");
-      line.textContent = sheet.name + " — lien à ajouter";
-      $("layers").appendChild(line);
-      return;
-    }
-
-    if (result.error) {
-      const line = document.createElement("div");
-      line.textContent = sheet.name + " — erreur de chargement";
-      $("layers").appendChild(line);
-      return;
-    }
-
-    const label = document.createElement("label");
-    label.className = "layer";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = result.count > 0;
-    checkbox.disabled = result.count === 0;
-
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) {
-        result.layer.addTo(map);
-      } else {
-        map.removeLayer(result.layer);
+  function markerStyle(sheet) {
+    return {radius:sheet.kind==="place"?7:6,color:sheet.color,fillColor:sheet.color,fillOpacity:.92,weight:2};
+  }
+  function createMarker(row, sheet, targetMap, w, h, mapId) {
+    if(!isVisible(field(row,["Visible","visible"]))) return null;
+    const rawX=field(row,["Region X","Region_X","X"]), rawY=field(row,["Region Y","Region_Y","Y"]);
+    const x=Number(rawX.replace(",",".")), y=Number(rawY.replace(",","."));
+    if(rawX===""||rawY===""||!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0||x>w||y>h) return null;
+    const rowMapId=getMapId(row);
+    if(mapId===MAIN_MAP_ID && !isMainMapRow(row)) return null;
+    if(mapId!==MAIN_MAP_ID && normalize(rowMapId)!==normalize(mapId)) return null;
+    const marker=L.circleMarker([h-y,x],markerStyle(sheet));
+    marker.bindPopup(popupHTML(row,sheet.name,rowMapId));
+    marker.on("click",()=> {
+      selectedEntity={row,sheet};
+      renderRelatedPeople(selectedEntity);
+    });
+    targetMap.addLayer(marker);
+    return marker;
+  }
+  function addLayerControl(sheet, rows) {
+    const line=document.createElement("label"); line.className="layer";
+    const checkbox=document.createElement("input"); checkbox.type="checkbox"; checkbox.checked=true;
+    const dot=document.createElement("span"); dot.className="dot"; dot.style.backgroundColor=sheet.color;
+    const text=document.createElement("span"); text.textContent=sheet.name+" ("+rows.length+")";
+    checkbox.addEventListener("change",()=>{
+      const group=mainLayers.get(sheet.name);
+      if(!group) return;
+      if(checkbox.checked) group.addTo(map); else map.removeLayer(group);
+      if(activeRegionalMap) {
+        const rg=regionalLayers.get(sheet.name);
+        if(rg) { if(checkbox.checked) rg.addTo(regionalMap); else regionalMap.removeLayer(rg); }
       }
     });
-
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.backgroundColor = sheet.color;
-
-    const text = document.createElement("span");
-    text.textContent = sheet.name + " (" + result.count + ")";
-
-    label.append(checkbox, dot, text);
-    $("layers").appendChild(label);
+    line.append(checkbox,dot,text); $("layers").appendChild(line);
   }
-
-  async function initializeMap() {
-    const image = new Image();
-
-    image.onload = async () => {
-      imageWidth = image.naturalWidth;
-      imageHeight = image.naturalHeight;
-
-      const bounds = [[0, 0], [imageHeight, imageWidth]];
-
-      map = L.map("map", {
-        crs: L.CRS.Simple,
-        minZoom: -3,
-        maxZoom: 3,
-        zoomSnap: 0.25,
-        zoomDelta: 0.5
+  function initMainMap() {
+    const image=new Image();
+    image.onload=async()=>{
+      imageWidth=image.naturalWidth; imageHeight=image.naturalHeight;
+      const bounds=[[0,0],[imageHeight,imageWidth]];
+      map=L.map("map",{crs:L.CRS.Simple,minZoom:-3,maxZoom:3,zoomSnap:.25,zoomDelta:.5});
+      L.imageOverlay(MAP_IMAGE,bounds).addTo(map); map.fitBounds(bounds);
+      map.on("mousemove",event=>{
+        $("cursor").textContent="X "+Math.round(event.latlng.lng)+" / Y "+Math.round(imageHeight-event.latlng.lat);
       });
-
-      L.imageOverlay(MAP_IMAGE, bounds).addTo(map);
-      map.fitBounds(bounds);
-
-      map.on("mousemove", event => {
-        const x = Math.round(event.latlng.lng);
-        const y = Math.round(imageHeight - event.latlng.lat);
-        $("cursor").textContent = "X " + x + " / Y " + y;
-      });
-
-      map.on("click", event => {
-        const x = Math.round(event.latlng.lng);
-        const y = Math.round(imageHeight - event.latlng.lat);
-
-        selectedPoint = {
-          x: Math.max(0, Math.min(imageWidth, x)),
-          y: Math.max(0, Math.min(imageHeight, y))
-        };
-
-        if (selectedMarker) {
-          map.removeLayer(selectedMarker);
-        }
-
-        selectedMarker = L.circleMarker(
-          [imageHeight - selectedPoint.y, selectedPoint.x],
-          {
-            radius: 8,
-            color: "#ffffff",
-            fillColor: "#ffdf45",
-            fillOpacity: 1,
-            weight: 3
+      map.on("click",event=>choosePoint(event,map,imageWidth,imageHeight,"selected"));
+      await loadAllData();
+    };
+    image.onerror=()=>status("Impossible de charger l’image principale. Vérifie l’URL de MAP_IMAGE.");
+    image.src=MAP_IMAGE;
+  }
+  function choosePoint(event, targetMap, w, h, outputId) {
+    const point={x:Math.max(0,Math.min(w,Math.round(event.latlng.lng))),y:Math.max(0,Math.min(h,Math.round(h-event.latlng.lat)))};
+    if(outputId==="selected") {
+      selectedPoint=point;
+      if(selectedMarker) map.removeLayer(selectedMarker);
+      selectedMarker=L.circleMarker([h-point.y,point.x],{radius:8,color:"#fff",fillColor:"#ffdf45",fillOpacity:1,weight:3}).addTo(map);
+      selectedMarker.bindPopup("X = "+point.x+"<br>Y = "+point.y).openPopup();
+      $("selected").textContent="X "+point.x+" / Y "+point.y;
+    } else {
+      if(regionalSelectedMarker) regionalMap.removeLayer(regionalSelectedMarker);
+      regionalSelectedMarker=L.circleMarker([h-point.y,point.x],{radius:8,color:"#fff",fillColor:"#ffdf45",fillOpacity:1,weight:3}).addTo(regionalMap);
+      $("regionalCoords").textContent="X "+point.x+" / Y "+point.y;
+    }
+  }
+  async function loadAllData() {
+    $("layers").textContent=""; status("Carte chargée ("+imageWidth+" × "+imageHeight+" px). Chargement des onglets…");
+    const results=await Promise.all(SHEETS.map(async sheet=>{
+      try { const rows=await fetchCSV(sheet.url,sheet.name); return {sheet,rows}; }
+      catch(error) { console.error("CSV",sheet.name,error); return {sheet,rows:[],error:error.message}; }
+    }));
+    loadedSheets=results;
+    peopleRows=(results.find(r=>r.sheet.kind==="person")||{rows:[]}).rows;
+    for(const result of results) {
+      const {sheet,rows,error}=result;
+      const group=L.layerGroup(); let count=0, invalid=0, hidden=0;
+      for(const row of rows) {
+        if(!isVisible(field(row,["Visible","visible"]))) { hidden++; continue; }
+        const before=count;
+        const marker=createMarker(row,sheet,group,imageWidth,imageHeight,MAIN_MAP_ID);
+        if(marker) count++;
+        else {
+          const x=field(row,["Region X","Region_X","X"]), y=field(row,["Region Y","Region_Y","Y"]);
+          if(x!==""||y!=="") {
+            const nx=Number(x.replace(",",".")), ny=Number(y.replace(",","."));
+            if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||ny<0||nx>imageWidth||ny>imageHeight) invalid++;
           }
-        ).addTo(map);
-
-        selectedMarker.bindPopup(
-          "X = " + selectedPoint.x +
-          "<br>Y = " + selectedPoint.y
-        ).openPopup();
-
-        $("selected").textContent =
-          "X " + selectedPoint.x + " / Y " + selectedPoint.y;
-      });
-
-      $("copy").addEventListener("click", async () => {
-        if (!selectedPoint) {
-          status("Clique d'abord sur la carte pour sélectionner un point.");
-          return;
         }
-
-        const coords = selectedPoint.x + "," + selectedPoint.y;
-
-        try {
-          await navigator.clipboard.writeText(coords);
-          status("Coordonnées copiées : " + coords);
-        } catch {
-          status("Copie manuelle : " + coords);
-        }
-      });
-
-      $("clear").addEventListener("click", () => {
-        if (selectedMarker) map.removeLayer(selectedMarker);
-        selectedMarker = null;
-        selectedPoint = null;
-        $("selected").textContent = "aucun";
-      });
-
-      $("layers").textContent = "";
-      status(
-        "Carte chargée (" + imageWidth + " × " +
-        imageHeight + " pixels).\nChargement des onglets…"
-      );
-
-      const results = await Promise.all(SHEETS.map(loadSheet));
-      results.forEach(addLayerControl);
-
-      status(results.map(result => {
-        if (result.skipped) {
-          return result.sheet.name + " : lien CSV à ajouter";
-        }
-        if (result.error) {
-          return result.sheet.name + " : ERREUR — " + result.error;
-        }
-
-        return result.sheet.name + " : " + result.count +
-          " point(s), " + result.invalid +
-          " ligne(s) sans coordonnées valides, " +
-          result.hidden + " masqué(s)";
-      }).join("\n"));
-    };
-
-    image.onerror = () => {
-      status(
-        "Impossible de charger l'image de la carte. " +
-        "Vérifie l'URL de l'image."
-      );
-    };
-
-    image.src = MAP_IMAGE;
+      }
+      mainLayers.set(sheet.name,group);
+      if(count) group.addTo(map);
+      if(error) {
+        const line=document.createElement("div"); line.className="small"; line.textContent=sheet.name+" — erreur : "+error; $("layers").appendChild(line);
+      } else addLayerControl(sheet,rows);
+      result.stats={count,invalid,hidden};
+    }
+    await loadMapDefinitions();
+    renderSearch("");
+    status(results.map(r=>r.sheet.name+": "+(r.error?"ERREUR — "+r.error:(r.stats?.count||0)+" point(s) sur la carte principale")).join("\n"));
   }
-
-  initializeMap();
+  async function loadMapDefinitions() {
+    mapDefinitions=[{Carte_ID:MAIN_MAP_ID,Nom:"Bordeciel",Image_URL:MAP_IMAGE,Visible:"oui"}];
+    if(CARTES_CSV_URL) {
+      try {
+        const regional=await fetchCSV(CARTES_CSV_URL,"Cartes");
+        mapDefinitions.push(...regional.filter(row=>isVisible(field(row,["Visible","visible"])) && field(row,["Carte_ID","ID","Id"])));
+      } catch(error) { console.error("Onglet Cartes",error); status($("status").textContent+"\nCartes : "+error.message); }
+    }
+    const select=$("mapSelect"); select.innerHTML="";
+    const placeholder=document.createElement("option"); placeholder.value=""; placeholder.textContent="Choisir une carte…"; select.appendChild(placeholder);
+    mapDefinitions.filter(def=>getId(def)!==MAIN_MAP_ID).forEach(def=>{
+      const opt=document.createElement("option"); opt.value=field(def,["Carte_ID","ID","Id"]); opt.textContent=field(def,["Nom","Name"])||opt.value; select.appendChild(opt);
+    });
+    $("openMap").disabled=select.options.length<=1;
+    select.addEventListener("change",()=>{$("openMap").disabled=!select.value;});
+    $("openMap").addEventListener("click",()=>openRegionalMapById(select.value));
+  }
+  window.openRegionalMapById = function(id) {
+    const def=mapDefinitions.find(d=>normalize(field(d,["Carte_ID","ID","Id"]))===normalize(id));
+    if(!def) { alert("Carte introuvable. Vérifie Carte_ID dans l’onglet Cartes."); return; }
+    const src=imageUrlForMap(def);
+    if(!src) { alert("Aucune Image_URL renseignée pour cette carte."); return; }
+    activeRegionalMap=def;
+    $("regionalTitle").textContent=field(def,["Nom","Name"])||id;
+    $("regionalCoords").textContent="";
+    $("regionalOverlay").classList.add("open");
+    setTimeout(()=>loadRegionalMap(def,src),80);
+  };
+  function loadRegionalMap(def,src) {
+    const image=new Image();
+    image.onload=()=>{
+      regionalImageWidth=image.naturalWidth; regionalImageHeight=image.naturalHeight;
+      if(regionalMap) { regionalMap.remove(); regionalMap=null; }
+      regionalMap=L.map("regionalMap",{crs:L.CRS.Simple,minZoom:-3,maxZoom:4,zoomSnap:.25,zoomDelta:.5});
+      const bounds=[[0,0],[regionalImageHeight,regionalImageWidth]];
+      L.imageOverlay(src,bounds).addTo(regionalMap); regionalMap.fitBounds(bounds);
+      regionalMap.on("mousemove",e=>{$("regionalCoords").textContent="X "+Math.round(e.latlng.lng)+" / Y "+Math.round(regionalImageHeight-e.latlng.lat);});
+      regionalMap.on("click",e=>choosePoint(e,regionalMap,regionalImageWidth,regionalImageHeight,"regional"));
+      regionalLayers.clear();
+      for(const result of loadedSheets) {
+        const group=L.layerGroup();
+        for(const row of result.rows) createMarker(row,result.sheet,group,regionalImageWidth,regionalImageHeight,field(def,["Carte_ID","ID","Id"]));
+        regionalLayers.set(result.sheet.name,group);
+        const control=[...$("layers").querySelectorAll("input[type=checkbox]")].find(input=>input.parentElement.textContent.includes(result.sheet.name));
+        if(!control||control.checked) group.addTo(regionalMap);
+      }
+      setTimeout(()=>regionalMap.invalidateSize(),100);
+    };
+    image.onerror=()=>alert("Impossible de charger l’image régionale : "+src+"\nVérifie Image_URL dans l’onglet Cartes.");
+    image.src=src;
+  }
+  function closeRegionalMap() {
+    $("regionalOverlay").classList.remove("open");
+    activeRegionalMap=null;
+    if(regionalMap) { regionalMap.remove(); regionalMap=null; }
+    regionalLayers.clear(); regionalSelectedMarker=null;
+    $("regionalCoords").textContent="";
+  }
+  function idsFor(row, names) { return splitIds(field(row,names)); }
+  function relatedToSelected(person) {
+    if(!selectedEntity) return false;
+    const entity=selectedEntity.row, kind=selectedEntity.sheet.kind;
+    const personIds=idsFor(person,["Personnage_ID","Personnage ID","ID","Id"]);
+    const personPlaceIds=idsFor(person,["Lieu_ID","Lieu_IDs","Lieu ID","Lieux_ID","Lieu"]);
+    const personFactionIds=idsFor(person,["Faction_ID","Faction_IDs","Faction ID","Factions_ID","Faction"]);
+    const entityId=getId(entity);
+    if(kind==="place") {
+      const placeIds=idsFor(entity,["Lieu_ID","ID","Id"]);
+      const placeName=getName(entity);
+      return personPlaceIds.some(id=>placeIds.includes(id)||normalize(id)===normalize(placeName)) ||
+        idsFor(person,["Lieu","Lieux","Lieu_Nom","Lieux_Noms"]).some(n=>normalize(n)===normalize(placeName));
+    }
+    if(kind==="faction") {
+      const factionIds=idsFor(entity,["Faction_ID","ID","Id"]);
+      const factionName=getName(entity);
+      return personFactionIds.some(id=>factionIds.includes(id)||normalize(id)===normalize(factionName)) ||
+        idsFor(person,["Faction","Factions","Faction_Nom","Factions_Noms"]).some(n=>normalize(n)===normalize(factionName));
+    }
+    return false;
+  }
+  function renderRelatedPeople(entity) {
+    selectedEntity=entity;
+    const name=getName(entity.row), kind=entity.sheet.kind;
+    $("relatedTitle").textContent=kind==="faction"?"Membres de la faction":"Personnes liées";
+    $("relatedContext").textContent=name+" · "+entity.sheet.name;
+    const linked=peopleRows.filter(p=>relatedToSelected(p)).sort((a,b)=>getName(a).localeCompare(getName(b),"fr",{sensitivity:"base"}));
+    renderPersonButtons(linked,$("peopleList"),"Aucune personne liée trouvée. Vérifie les colonnes Lieu_ID et Faction_ID dans l’onglet Personnes.");
+  }
+  function renderPersonButtons(rows,container,emptyMessage) {
+    container.innerHTML="";
+    if(!rows.length) { const p=document.createElement("p"); p.className="empty"; p.textContent=emptyMessage; container.appendChild(p); return; }
+    rows.forEach(row=>{
+      const button=document.createElement("button"); button.className="person-item";
+      const strong=document.createElement("strong"); strong.textContent=getName(row);
+      const meta=[field(row,["Race"]),field(row,["Faction","Faction_Nom"]),field(row,["Lieu","Lieu_Nom"])].filter(Boolean).join(" · ");
+      const span=document.createElement("span"); span.textContent=meta||"Cliquer pour ouvrir la fiche";
+      button.append(strong,span); button.addEventListener("click",()=>showPerson(row)); container.appendChild(button);
+    });
+  }
+  function renderSearch(query) {
+    const q=normalize(query);
+    const results=peopleRows.filter(row=>!q||normalize(getName(row)).includes(q))
+      .sort((a,b)=>getName(a).localeCompare(getName(b),"fr",{sensitivity:"base"})).slice(0,80);
+    renderPersonButtons(results,$("searchResults"),"Aucun personnage trouvé.");
+  }
+  function showPerson(row) {
+    $("personModalTitle").textContent=getName(row);
+    const fields=[["ID",["Personnage_ID","ID","Id"]],["Race",["Race"]],["Faction(s)",["Faction_ID","Faction_IDs","Faction","Factions"]],["Lieu(x)",["Lieu_ID","Lieu_IDs","Lieu","Lieux"]],["Description",["Description","Bio","Histoire"]],["Fiche",["Fiche"]]];
+    const body=$("personModalBody"); body.innerHTML="";
+    fields.forEach(([label,names])=>{
+      const value=field(row,names); if(!value) return;
+      const p=document.createElement("p");
+      const strong=document.createElement("strong"); strong.textContent=label+": ";
+      p.append(strong,document.createTextNode(value)); body.appendChild(p);
+    });
+    const fiche=field(row,["Fiche","URL"]);
+    if(fiche && /^https?:\/\//i.test(fiche)) {
+      const a=document.createElement("a"); a.href=fiche; a.target="_blank"; a.rel="noopener noreferrer"; a.textContent="Ouvrir la fiche complète"; body.appendChild(a);
+    }
+    $("personModal").classList.add("open");
+  }
+  $("personSearch").addEventListener("input",e=>renderSearch(e.target.value));
+  $("closeMap").addEventListener("click",closeRegionalMap);
+  $("regionalOverlay").addEventListener("click",e=>{if(e.target===$("regionalOverlay"))closeRegionalMap();});
+  $("closePerson").addEventListener("click",()=>$("personModal").classList.remove("open"));
+  $("personModal").addEventListener("click",e=>{if(e.target===$("personModal"))$("personModal").classList.remove("open");});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeRegionalMap();$("personModal").classList.remove("open");}});
+  $("copy").addEventListener("click",async()=>{
+    if(!selectedPoint){status("Clique d’abord sur la carte principale pour sélectionner un point.");return;}
+    const coords=selectedPoint.x+","+selectedPoint.y;
+    try { await navigator.clipboard.writeText(coords); status("Coordonnées copiées : "+coords); }
+    catch { status("Copie manuelle : "+coords); }
+  });
+  $("clear").addEventListener("click",()=>{
+    if(selectedMarker&&map)map.removeLayer(selectedMarker);
+    selectedMarker=null;selectedPoint=null;$("selected").textContent="aucun";
+  });
+  initMainMap();
 </script>
 </body>
 </html>
